@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip Planner – plan where to stay, eat and explore</title>
+<style>
+:root{--bg:#071226;--card:#0f2746;--card2:#13365c;--line:#00a0dc;--tx:#f5f8ff;--mu:#b9cade;--ac:#42dcf0;--warn:#ffb84d;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 "Aptos","Segoe UI",Calibri,Arial,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:34px;margin:0 0 4px}
+h2{font-size:22px;margin:28px 0 10px;color:var(--ac)}
+.sub{color:var(--mu);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+label{display:block;font-weight:600;margin:12px 0 6px}
+input{width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit}
+input:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:620px){.row{grid-template-columns:1fr}}
+.btn{background:var(--ac);color:var(--bg);border:0;border-radius:10px;padding:12px 22px;font:inherit;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--line)}
+.nav{display:flex;justify-content:space-between;margin-top:20px;gap:10px}
+.prog{display:flex;gap:6px;margin-bottom:16px}
+.prog i{flex:1;height:6px;border-radius:3px;background:var(--card2)}
+.prog i.on{background:var(--ac)}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:10px}
+.mode{background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:14px;font:inherit;cursor:pointer;text-align:center}
+.mode.on{background:var(--card2);border-color:var(--ac);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.stat b{display:block;font-size:22px;color:var(--ac)}
+.stat span{color:var(--mu);font-size:14px}
+#map,#rmap{height:380px;border-radius:14px;border:1px solid var(--line);margin-top:12px}
+iframe{width:100%;height:380px;border:1px solid var(--line);border-radius:14px;margin-top:12px;background:#fff}
+.day{margin-bottom:16px}
+.day h3{margin:0 0 10px;font-size:19px}
+.ev{display:grid;grid-template-columns:76px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--card2)}
+.ev time{color:var(--ac);font-weight:700}
+.ev small{color:var(--mu);display:block}
+a{color:var(--ac)}
+.note{background:var(--card2);border-left:4px solid var(--warn);padding:10px 14px;border-radius:8px;margin:12px 0;color:var(--tx)}
+.hid{display:none}
+details{margin-bottom:16px}
+summary{cursor:pointer;color:var(--mu)}
+.stay{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--card2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trip Planner</h1>
+  <p class="sub">Answer five quick questions and get a day-by-day plan with places to stay, eat and explore, picked to fit your budget.</p>
+
+  <details id="keybox">
+    <summary>Google Maps API key (needed for live restaurants, hotels and distances)</summary>
+    <div class="card" style="margin-top:8px">
+      <label for="key">Paste your key</label>
+      <input id="key" type="password" placeholder="AIza…" autocomplete="off">
+      <p class="sub" style="margin:8px 0 0;font-size:14px">In Google Cloud Console, enable <b>Maps JavaScript API</b>, <b>Places API (New)</b>, <b>Geocoding API</b> and <b>Directions API</b>, then create an API key. The key is saved only in this browser.</p>
+    </div>
+  </details>
+
+  <div class="card" id="wizard">
+    <div class="prog" id="prog"></div>
+
+    <div class="step" data-step="0">
+      <h2 style="margin-top:0">Where are you travelling?</h2>
+      <label for="from">Starting place</label><input id="from" placeholder="e.g. Coimbatore">
+      <label for="to">Destination</label><input id="to" placeholder="e.g. Munnar">
+    </div>
+    <div class="step hid" data-step="1">
+      <h2 style="margin-top:0">How many days do you have?</h2>
+      <label for="days">Number of days</label><input id="days" type="number" min="1" max="14" value="3">
+    </div>
+    <div class="step hid" data-step="2">
+      <h2 style="margin-top:0">What is your budget?</h2>
+      <div class="row">
+        <div><label for="budget">Total budget (₹)</label><input id="budget" type="number" min="500" step="500" value="15000"></div>
+        <div><label for="people">Number of travellers</label><input id="people" type="number" min="1" max="12" value="2"></div>
+      </div>
+    </div>
+    <div class="step hid" data-step="3">
+      <h2 style="margin-top:0">When does the trip start?</h2>
+      <label for="start">Start date and time</label><input id="start" type="datetime-local">
+    </div>
+    <div class="step hid" data-step="4">
+      <h2 style="margin-top:0">How will you travel?</h2>
+      <div class="modes" id="modes"></div>
+    </div>
+
+    <div id="err" class="note hid"></div>
+    <div class="nav">
+      <button class="btn ghost" id="back">Back</button>
+      <button class="btn" id="next">Next</button>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+// Optional: paste your key here instead of typing it into the page.
+const GOOGLE_MAPS_API_KEY = "";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
+const hm = d => d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+const dayFmt = d => d.toLocaleDateString([], {weekday:"short", day:"numeric", month:"short"});
+const hrs = h => { const m = Math.round(h*60); return Math.floor(m/60) + " h " + (m%60) + " min"; };
+
+// Planning assumptions (edit these to tune the estimates)
+const MODES = {
+  car:    {name:"Car",    speed:55,  cost:8,   shared:true,  perVehicle:4, road:1.3, gmode:"DRIVING", gap:100},
+  bike:   {name:"Bike",   speed:45,  cost:3,   shared:true,  perVehicle:2, road:1.3, gmode:"DRIVING", gap:70},
+  bus:    {name:"Bus",    speed:45,  cost:2,   shared:false, road:1.3, gmode:"DRIVING"},
+  train:  {name:"Train",  speed:60,  cost:1.5, shared:false, road:1.25},
+  flight: {name:"Flight", speed:700, cost:6,   shared:false, road:1.0, extraH:3}
+};
+const SPLIT = {stay:0.45, food:0.30, local:0.25};   // share of money left after transport
+const NO_KEY_TRANSPORT_SHARE = 0.25;                // used only when no API key is set
+
+const d = {mode:"car"};
+let step = 0;
+const TOTAL = 5;
+
+// ---------- wizard ----------
+$("prog").innerHTML = Array.from({length:TOTAL}, () => "<i></i>").join("");
+$("modes").innerHTML = Object.entries(MODES).map(([k,m]) => `<button class="mode${k===d.mode?" on":""}" data-m="${k}">${m.name}</button>`).join("");
+$("modes").onclick = e => { const b = e.target.closest(".mode"); if(!b) return; d.mode = b.dataset.m; document.querySelectorAll(".mode").forEach(x => x.classList.toggle("on", x===b)); };
+const t = new Date(Date.now() + 864e5); t.setHours(8,0,0,0);
+$("start").value = new Date(t - t.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+try { $("key").value = localStorage.getItem("gmk") || ""; } catch(e) {}
+
+function showStep(){
+  document.querySelectorAll(".step").forEach(s => s.classList.toggle("hid", +s.dataset.step !== step));
+  document.querySelectorAll("#prog i").forEach((p,i) => p.classList.toggle("on", i <= step));
+  $("back").style.visibility = step ? "visible" : "hidden";
+  $("next").textContent = step === TOTAL-1 ? "Plan my trip" : "Next";
+}
+function fail(msg){ const e = $("err"); e.textContent = msg; e.classList.toggle("hid", !msg); return !msg; }
+function check(){
+  fail("");
+  if(step===0 && (!$("from").value.trim() || !$("to").value.trim())) return fail("Enter both your starting place and your destination.");
+  if(step===1 && !(+$("days").value >= 1)) return fail("Enter at least 1 day.");
+  if(step===2 && (!(+$("budget").value >= 500) || !(+$("people").value >= 1))) return fail("Enter a budget of at least ₹500 and at least 1 traveller.");
+  if(step===3 && !$("start").value) return fail("Choose when the trip starts.");
+  return true;
+}
+$("back").onclick = () => { if(step){ step--; fail(""); showStep(); } };
+$("next").onclick = () => {
+  if(!check()) return;
+  if(step < TOTAL-1){ step++; showStep(); return; }
+  Object.assign(d, {from:$("from").value.trim(), to:$("to").value.trim(), days:+$("days").value, budget:+$("budget").value, people:+$("people").value, start:new Date($("start").value)});
+  generate();
+};
+showStep();
+
+// ---------- geometry ----------
+function km(a,b){ const R=6371, r=x=>x*Math.PI/180, dl=r(b.lat-a.lat), dn=r(b.lng-a.lng);
+  const h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+
+// ---------- Google Maps ----------
+function loadMaps(key){
+  return new Promise((res, rej) => {
+    if(window.google && google.maps) return res();
+    window.__mapsReady = res; window.gm_authFailure = () => rej(new Error("Google rejected the API key. Check that the key is valid and the APIs are enabled."));
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&callback=__mapsReady&v=weekly`;
+    s.onerror = () => rej(new Error("Could not load Google Maps. Check your internet connection."));
+    document.head.appendChild(s);
+  });
+}
+async function geocode(q){
+  const {Geocoder} = await google.maps.importLibrary("geocoding");
+  const r = await new Geocoder().geocode({address:q});
+  if(!r.results.length) throw new Error(`Google Maps could not find “${q}”.`);
+  const l = r.results[0].geometry.location;
+  return {lat:l.lat(), lng:l.lng(), name:r.results[0].formatted_address};
+}
+async function nearby(center, types, radius, max){
+  const {Place} = await google.maps.importLibrary("places");
+  const {places} = await Place.searchNearby({
+    fields:["displayName","location","rating","userRatingCount","priceLevel","googleMapsURI"],
+    locationRestriction:{center, radius}, includedTypes:types, maxResultCount:max, rankPreference:"POPULARITY"
+  });
+  return places.map(p => ({name:p.displayName, lat:p.location.lat(), lng:p.location.lng(), rating:p.rating||0, n:p.userRatingCount||0, price:p.priceLevel||null, url:p.googleMapsURI}));
+}
+async function roadRoute(a, b, gmode){
+  try{
+    const {DirectionsService} = await google.maps.importLibrary("routes");
+    const r = await new DirectionsService().route({origin:a, destination:b, travelMode:google.maps.TravelMode[gmode]});
+    const l = r.routes[0].legs[0];
+    return {km:l.distance.value/1000, h:l.duration.value/3600, path:r.routes[0].overview_path.map(q => ({lat:q.lat(), lng:q.lng()}))};
+  }catch(e){ return null; }
+}
+
+// ---------- budget helpers ----------
+const LEVEL = {FREE:0, INEXPENSIVE:1, MODERATE:2, EXPENSIVE:3, VERY_EXPENSIVE:4};
+const maxStayLevel = perRoomNight => perRoomNight <= 1500 ? 1 : perRoomNight <= 4000 ? 2 : perRoomNight <= 10000 ? 3 : 4;
+const maxFoodLevel = perMeal => perMeal <= 250 ? 1 : perMeal <= 700 ? 2 : perMeal <= 1500 ? 3 : 4;
+const okLevel = (p, max) => p == null || (LEVEL[p] ?? 2) <= max;
+const levelText = p => ({FREE:"Free", INEXPENSIVE:"Budget", MODERATE:"Mid-range", EXPENSIVE:"Premium", VERY_EXPENSIVE:"Luxury"}[p] || "Price not listed");
+const rangeText = p => ({FREE:"Free", INEXPENSIVE:"about ₹500 to ₹1,500 per night", MODERATE:"about ₹1,500 to ₹4,000 per night", EXPENSIVE:"about ₹4,000 to ₹10,000 per night", VERY_EXPENSIVE:"₹10,000+ per night"}[p] || "Price not listed, check on Google Maps");
+const score = p => p.rating * Math.log10(p.n + 10);
+
+function transportCost(m, distKm){
+  const M = MODES[m], one = distKm * M.cost;
+  if(M.shared) return one * Math.ceil(d.people / M.perVehicle) * 2;
+  return one * d.people * 2;
+}
+
+// ---------- rest stops (car and bike) ----------
+async function findBreaks(path, dist, hrsTravel, gap){
+  let L = 0; for(let i = 1; i < path.length; i++) L += km(path[i-1], path[i]);
+  const scale = dist / (L || 1), pts = []; let acc = 0, next = gap;
+  for(let i = 1; i < path.length && pts.length < 6; i++){
+    acc += km(path[i-1], path[i]) * scale;
+    while(acc >= next && pts.length < 6){ if(dist - next >= 20) pts.push({lat:path[i].lat, lng:path[i].lng, at:next}); next += gap; }
+  }
+  const found = await Promise.all(pts.map(async p => {
+    let list = [];
+    try{ list = await nearby(p, ["cafe","tea_house","restaurant"], 6000, 10); }
+    catch(e){ try{ list = await nearby(p, ["cafe","restaurant"], 6000, 10); }catch(e2){} }
+    const best = list.filter(x => x.rating >= 3.5).sort((a,b) => score(b)-score(a))[0] || list[0];
+    return best ? {...best, at:p.at, hrs:p.at/dist*hrsTravel} : null;
+  }));
+  return found.filter(Boolean);
+}
+
+// ---------- plan builder ----------
+function buildPlan(c){
+  const used = new Set(), left = c.attractions.slice(0, 24), days = [];
+  const pickRest = (near, meal) => {
+    const pool = c.restaurants.filter(r => !used.has(r.name) && okLevel(r.price, c.foodLvl));
+    const good = pool.filter(r => r.rating >= 4);
+    const list = (good.length ? good : pool).slice().sort((a,b) => km(near,a) - km(near,b));
+    const r = list[0]; if(r){ used.add(r.name); } return r && {...r, meal};
+  };
+  for(let i = 0; i < c.days; i++){
+    const base = new Date(c.start); base.setHours(0,0,0,0); base.setDate(base.getDate() + i);
+    let from = new Date(base); from.setHours(9,0,0,0);
+    let to = new Date(base); to.setHours(20,0,0,0);
+    if(c.arrive > from) from = new Date(+c.arrive + 36e5);
+    if(c.leave < to) to = new Date(c.leave);
+    const win = (to - from) / 36e5, ev = [];
+    if(i === 0 && c.arrive > c.start) ev.push({kind:"travel", t:c.start, text:`Depart ${c.from} by ${MODES[d.mode].name.toLowerCase()}`, sub:`Estimated arrival ${dayFmt(c.arrive)} ${hm(c.arrive)}`});
+    if(c.leave >= base && c.leave < new Date(+base + 864e5)) ev.push({kind:"travel", t:c.leave, text:`Start the return journey to ${c.from}`, sub:`Leave by ${hm(c.leave)}`});
+    const n = Math.max(0, Math.min(3, Math.floor(win / 3.5)));
+    let cur = new Date(from), lunch = false, last = c.stay || c.center;
+    for(let k = 0; k < n && left.length; k++){
+      let seed = k === 0 ? left[0] : left.slice().sort((a,b) => km(last,a) - km(last,b))[0];
+      left.splice(left.indexOf(seed), 1);
+      if(!lunch && cur.getHours() >= 12){ const r = pickRest(last, "Lunch"); if(r){ ev.push({kind:"eat", t:new Date(cur), p:r, from:last}); last = r; cur = new Date(+cur + 36e5); } lunch = true; }
+      ev.push({kind:"see", t:new Date(cur), p:seed, from:last, dist:km(last, seed)});
+      cur = new Date(+cur + 72e5 + Math.max(10, km(last,seed)/25*60) * 6e4); last = seed;
+    }
+    if(!lunch && n){ const r = pickRest(last, "Lunch"); if(r){ const at = new Date(Math.max(+from, +new Date(base).setHours(13,0))); ev.push({kind:"eat", t:at, p:r}); } }
+    if(win >= 3.5){ const r = pickRest(last, "Dinner"); if(r){ const at = new Date(Math.max(+cur, +new Date(base).setHours(19,30))); ev.push({kind:"eat", t:at, p:r}); } }
+    ev.sort((a,b) => a.t - b.t);
+    days.push({date:base, ev, rest: n === 0});
+  }
+  return days;
+}
+
+// ---------- main ----------
+async function generate(){
+  const out = $("out"); out.innerHTML = '<p class="sub">Planning your trip…</p>';
+  out.scrollIntoView({behavior:"smooth"});
+  const key = GOOGLE_MAPS_API_KEY || $("key").value.trim();
+  try{ if(key) localStorage.setItem("gmk", key); }catch(e){}
+  const mk = q => encodeURIComponent(q);
+  const gmDir = `https://www.google.com/maps/dir/?api=1&origin=${mk(d.from)}&destination=${mk(d.to)}&travelmode=${d.mode==="bike"?"two-wheeler":d.mode==="bus"||d.mode==="train"?"transit":"driving"}`;
+
+  if(!key){
+    const T = d.budget * NO_KEY_TRANSPORT_SHARE, R = d.budget - T, nights = Math.max(d.days - 1, 1);
+    out.innerHTML = `
+      <h2>Your plan outline</h2>
+      <div class="note">Add a Google Maps API key (the box at the top) to get real distances, nearby hotels, restaurants and a day-by-day plan. Until then, here is your budget split and map links.</div>
+      ${statsHtml([["Transport (estimated share)", inr(T), "Return journey for everyone"],["Stay per night", inr(R*SPLIT.stay/nights), `${d.days} days, ${nights} night${nights>1?"s":""}`],["Food per day", inr(R*SPLIT.food/d.days), `For ${d.people} traveller${d.people>1?"s":""}`],["Local travel and tickets", inr(R*SPLIT.local), "For the whole trip"]])}
+      <h2>Route</h2><iframe title="Route map" loading="lazy" src="https://maps.google.com/maps?saddr=${mk(d.from)}&daddr=${mk(d.to)}&output=embed"></iframe>
+      <p><a href="${gmDir}" target="_blank" rel="noopener">Open the route in Google Maps</a></p>
+      <h2>Explore near ${esc(d.to)}</h2>
+      <p><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/${mk("hotels in "+d.to)}">Hotels</a>, <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/${mk("restaurants in "+d.to)}">restaurants</a> and <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/${mk("tourist attractions in "+d.to)}">tourist places</a> on Google Maps.</p>`;
+    return;
+  }
+
+  try{
+    await loadMaps(key);
+    const [A, B] = await Promise.all([geocode(d.from), geocode(d.to)]);
+    const M = MODES[d.mode], straight = km(A, B);
+    let path = null, dist = straight * M.road, hrsTravel = dist / M.speed + (M.extraH || 0), exact = false;
+    if(M.gmode){ const r = await roadRoute(A, B, M.gmode); if(r){ dist = r.km; hrsTravel = r.h * (d.mode==="bus"?1.2:1); exact = true; path = r.path; } }
+    const T = transportCost(d.mode, dist), R = Math.max(d.budget - T, 0), nights = Math.max(d.days - 1, 1);
+    const rooms = Math.ceil(d.people / 2), stayPerRoom = R * SPLIT.stay / nights / rooms;
+    const foodPerMeal = R * SPLIT.food / d.days / d.people / 2.5, localTotal = R * SPLIT.local;
+    const [hotels, attractions, restaurants] = await Promise.all([
+      nearby(B, ["lodging"], 8000, 20), nearby(B, ["tourist_attraction"], 20000, 20), nearby(B, ["restaurant"], 10000, 20)]);
+    const stays = hotels.filter(h => okLevel(h.price, maxStayLevel(stayPerRoom))).sort((a,b) => score(b)-score(a));
+    const stay = stays.find(h => h.price) || stays[0] || null;
+    attractions.sort((a,b) => score(b)-score(a));
+    const arrive = new Date(+d.start + hrsTravel*36e5), leave = new Date(+d.start + d.days*864e5 - hrsTravel*36e5);
+    let breaks = [];
+    if(M.gap){ if(!path) path = Array.from({length:41}, (_,i) => ({lat:A.lat+(B.lat-A.lat)*i/40, lng:A.lng+(B.lng-A.lng)*i/40})); try{ breaks = await findBreaks(path, dist, hrsTravel, M.gap); }catch(e){} }
+    const plan = buildPlan({days:d.days, start:d.start, arrive, leave, from:A.name.split(",")[0], center:B, stay, attractions, restaurants, foodLvl:maxFoodLevel(foodPerMeal)});
+
+    let html = `<h2>Your trip: ${esc(d.from)} to ${esc(d.to)}</h2>`;
+    html += statsHtml([
+      ["Distance", Math.round(dist) + " km", exact ? "One way, by road (Google Maps)" : "One way, estimated"],
+      ["Travel time", hrs(hrsTravel), `By ${M.name.toLowerCase()}, one way`],
+      ["Transport cost", inr(T), "Return journey, estimated"],
+      ["Stay budget", inr(stayPerRoom) + " per room night", `${rooms} room${rooms>1?"s":""}, ${nights} night${nights>1?"s":""}`],
+      ["Food budget", inr(foodPerMeal) + " per meal", "Per person"],
+      ["Local travel and tickets", inr(localTotal), "For the whole trip"]]);
+    if(d.budget - T <= 0) html += `<div class="note">Transport alone is more than your budget. Try a cheaper way to travel or increase the budget.</div>`;
+    else if(arrive > leave) html += `<div class="note">The travel time takes most of your trip. Add more days or choose a faster transport.</div>`;
+    html += `<p><a href="${gmDir}" target="_blank" rel="noopener">Open the route in Google Maps</a></p>`;
+    const maxL = maxStayLevel(stayPerRoom);
+    const fit = hotels.filter(h => h.price && okLevel(h.price, maxL)).sort((a,b) => score(b)-score(a));
+    const unk = hotels.filter(h => !h.price).sort((a,b) => score(b)-score(a));
+    const stretch = hotels.filter(h => h.price && !okLevel(h.price, maxL)).sort((a,b) => score(b)-score(a));
+    const hotelRow = (h, tag) => `<div class="stay"><div><b>${esc(h.name)}</b><small style="display:block;color:var(--mu)">${tag}, ${rangeText(h.price)}</small></div><div>${h.rating ? h.rating.toFixed(1) + " stars (" + h.n.toLocaleString() + " reviews)" : "No rating"} <a href="${esc(h.url)}" target="_blank" rel="noopener">Map</a></div></div>`;
+    const hotelList = [...fit.slice(0,6).map(h => hotelRow(h, "Fits your budget")), ...unk.slice(0,4).map(h => hotelRow(h, "Price not listed")), ...(fit.length < 3 ? stretch.slice(0,3).map(h => hotelRow(h, "Above your budget")) : [])];
+    if(breaks.length){
+      html += `<h2>Rest stops on the way</h2><p class="sub">Take a 10 to 15 minute tea or snack break at each stop to stay fresh and safe on the road.</p><div class="card">` + breaks.map((b,i) => { const t = new Date(+d.start + b.hrs*36e5); return `<div class="stay"><div><b>Break ${i+1}: ${esc(b.name)}</b><small style="display:block;color:var(--mu)">About ${Math.round(b.at)} km from ${esc(d.from)}, around ${hm(t)}</small></div><div>${b.rating ? b.rating.toFixed(1) + " stars" : "No rating"} <a href="${esc(b.url)}" target="_blank" rel="noopener">Map</a></div></div>`; }).join("") + `</div><div id="rmap"></div>`;
+    }
+    html += `<div id="map"></div><h2>Hotels for your budget in ${esc(d.to)}</h2><p class="sub">Your stay budget is about ${inr(stayPerRoom)} per room per night. Hotels marked “Price not listed” may still fit, so check the price on Google Maps.</p><div class="card">` + (hotelList.length ? hotelList.join("") : "<p>No hotels found near the destination. Try a nearby town.</p>") + `</div>`;
+    const spots = attractions.slice(0,12), hub = stay || B;
+    html += `<h2>Places to visit in ${esc(d.to)}</h2><div class="card">` + (spots.length ? spots.map((p,i) => `<div class="stay"><div><b>${i+1}. ${esc(p.name)}</b><small style="display:block;color:var(--mu)">${km(hub,p).toFixed(1)} km from ${stay ? "your hotel" : "the centre"}</small></div><div>${p.rating ? p.rating.toFixed(1) + " stars (" + p.n.toLocaleString() + " reviews)" : "No rating"} <a href="${esc(p.url)}" target="_blank" rel="noopener">Map</a></div></div>`).join("") : "<p>No tourist places found. Try a more specific destination name.</p>") + `</div>`;
+    html += `<h2>Day-by-day plan</h2>` + plan.map((p,i) => `<div class="card day"><h3>Day ${i+1}, ${dayFmt(p.date)}</h3>` +
+      (p.ev.length ? p.ev.map(e => e.kind==="travel" ? `<div class="ev"><time>${hm(e.t)}</time><div><b>${esc(e.text)}</b><small>${esc(e.sub)}</small></div></div>`
+        : `<div class="ev"><time>${hm(e.t)}</time><div><b>${e.kind==="eat" ? esc(e.p.meal||"Meal") + ": " : "Visit: "}${esc(e.p.name)}</b><small>${e.p.rating ? e.p.rating.toFixed(1) + " stars" : "No rating"}${e.kind==="eat" ? ", " + levelText(e.p.price) : ""}${e.dist ? `, ${e.dist.toFixed(1)} km from previous stop` : ""} <a href="${esc(e.p.url)}" target="_blank" rel="noopener">Map</a></small></div></div>`).join("")
+        : `<div class="ev"><time></time><div><b>Travel and rest</b><small>Most of this day is spent travelling.</small></div></div>`) + `</div>`).join("");
+    out.innerHTML = html;
+
+    // map
+    const {Map} = await google.maps.importLibrary("maps"); await google.maps.importLibrary("marker");
+    const map = new Map($("map"), {center:B, zoom:12}), bounds = new google.maps.LatLngBounds();
+    const pin = (p, label, title) => { new google.maps.Marker({position:p, map, label, title}); bounds.extend(p); };
+    if(stay) pin(stay, "H", "Stay: " + stay.name);
+    plan.forEach((p,i) => p.ev.forEach(e => { if(e.p) pin(e.p, e.kind==="eat" ? "F" : String(i+1), (e.kind==="eat" ? "Food: " : "Day " + (i+1) + ": ") + e.p.name); }));
+    if(!bounds.isEmpty()) map.fitBounds(bounds); else pin(B, "", d.to);
+    if(breaks.length){
+      const {Polyline} = await google.maps.importLibrary("maps");
+      const rm = new Map($("rmap"), {center:A, zoom:8}), rb = new google.maps.LatLngBounds();
+      new Polyline({path, map:rm, strokeColor:"#00a0dc", strokeWeight:5});
+      const rp = (q, label, title) => { new google.maps.Marker({position:q, map:rm, label, title}); rb.extend(q); };
+      rp(A, "S", "Start: " + d.from); rp(B, "D", "Destination: " + d.to);
+      breaks.forEach((b,i) => rp(b, "T" + (i+1), "Break " + (i+1) + ": " + b.name));
+      rm.fitBounds(rb);
+    }
+  }catch(err){
+    out.innerHTML = `<div class="note"><b>Could not build the plan.</b><br>${esc(err.message || err)}<br>Check that your API key is correct and that Maps JavaScript API, Places API (New), Geocoding API and Directions API are enabled with billing on.</div>`;
+  }
+}
+function statsHtml(rows){ return '<div class="stats">' + rows.map(r => `<div class="stat"><b>${esc(r[1])}</b>${esc(r[0])}<br><span>${esc(r[2])}</span></div>`).join("") + "</div>"; }
+</script>
+</body>
+</html>
