@@ -86,6 +86,7 @@ summary{cursor:pointer;color:var(--mu)}
     <div class="step hid" data-step="4">
       <h2 style="margin-top:0">How will you travel?</h2>
       <div class="modes" id="modes"></div>
+      <label for="fare">Know the ticket price? (optional, bus, train or flight)</label><input id="fare" type="number" min="0" placeholder="Fare per person, one way, in ₹">
     </div>
 
     <div id="err" class="note hid"></div>
@@ -151,7 +152,7 @@ $("back").onclick = () => { if(step){ step--; fail(""); showStep(); } };
 $("next").onclick = () => {
   if(!check()) return;
   if(step < TOTAL-1){ step++; showStep(); return; }
-  Object.assign(d, {from:$("from").value.trim(), to:$("to").value.trim(), days:+$("days").value, budget:+$("budget").value, people:+$("people").value, start:new Date($("start").value)});
+  Object.assign(d, {from:$("from").value.trim(), to:$("to").value.trim(), days:+$("days").value, budget:+$("budget").value, people:+$("people").value, start:new Date($("start").value), fare:+$("fare").value || 0});
   generate();
 };
 showStep();
@@ -206,6 +207,7 @@ const score = p => p.rating * Math.log10(p.n + 10);
 
 function transportCost(m, distKm){
   const M = MODES[m], one = distKm * M.cost;
+  if(m === d.mode && d.fare > 0 && !M.shared) return d.fare * 2 * d.people;
   if(M.shared) return one * Math.ceil(d.people / M.perVehicle) * 2;
   return one * d.people * 2;
 }
@@ -226,6 +228,27 @@ async function findBreaks(path, dist, hrsTravel, gap){
     return best ? {...best, at:p.at, hrs:p.at/dist*hrsTravel} : null;
   }));
   return found.filter(Boolean);
+}
+
+// ---------- no-key estimates (OpenStreetMap geocoding) ----------
+async function osmGeocode(q){
+  const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q));
+  const j = await r.json(); if(!j.length) throw new Error("not found");
+  return {lat:+j[0].lat, lng:+j[0].lon};
+}
+function estimate(m, straight){ const M = MODES[m], dist = straight * M.road; return {dist, h:dist / M.speed + (M.extraH || 0), cost:transportCost(m, dist)}; }
+
+// ---------- ticket price check ----------
+const fareNote = () => (d.fare > 0 && !MODES[d.mode].shared) ? "From the fare you entered" : "Return journey, estimated";
+const localDate = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0");
+function applyFare(){ d.fare = +$("fare2").value || 0; generate(); }
+function fareHtml(){
+  const q = encodeURIComponent, links = {
+    flight:[["Google Flights", "https://www.google.com/travel/flights?q=" + q(`Flights from ${d.from} to ${d.to} on ${localDate(d.start)}`)],["MakeMyTrip flights","https://www.makemytrip.com/flights/"],["Skyscanner","https://www.skyscanner.co.in/"]],
+    train:[["IRCTC","https://www.irctc.co.in/nget/train-search"],["ConfirmTkt","https://www.confirmtkt.com/"],["MakeMyTrip trains","https://www.makemytrip.com/railways/"]],
+    bus:[["redBus","https://www.redbus.in/"],["AbhiBus","https://www.abhibus.com/"],["MakeMyTrip buses","https://www.makemytrip.com/bus-tickets/"]]}[d.mode];
+  if(!links) return "";
+  return `<h2>Check real ticket prices</h2><div class="card"><p class="sub">The cost above is an estimate. Open a booking site to see today’s fare, then enter it below to update your plan.</p><p>` + links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join(" &nbsp;|&nbsp; ") + `</p><label for="fare2">Fare per person, one way (₹)</label><input id="fare2" type="number" min="0" value="${d.fare || ""}"><div class="nav" style="justify-content:flex-start"><button class="btn" onclick="applyFare()">Update my plan</button></div></div>`;
 }
 
 // ---------- plan builder ----------
@@ -273,11 +296,16 @@ async function generate(){
   const gmDir = `https://www.google.com/maps/dir/?api=1&origin=${mk(d.from)}&destination=${mk(d.to)}&travelmode=${d.mode==="bike"?"two-wheeler":d.mode==="bus"||d.mode==="train"?"transit":"driving"}`;
 
   if(!key){
-    const T = d.budget * NO_KEY_TRANSPORT_SHARE, R = d.budget - T, nights = Math.max(d.days - 1, 1);
+    let est = null, straight0 = 0;
+    try{ const [a0, b0] = await Promise.all([osmGeocode(d.from), osmGeocode(d.to)]); straight0 = km(a0, b0); est = estimate(d.mode, straight0); }catch(e){}
+    const T = est ? est.cost : d.budget * NO_KEY_TRANSPORT_SHARE, R = Math.max(d.budget - T, 0), nights = Math.max(d.days - 1, 1);
+    const compare = est ? `<h2>Compare transport options</h2><div class="card">` + Object.keys(MODES).map(k => { const e = estimate(k, straight0); return `<div class="stay"><div><b>${MODES[k].name}${k===d.mode?" (selected)":""}</b></div><div>${inr(e.cost)} return, ${hrs(e.h)} one way</div></div>`; }).join("") + `</div>` : "";
     out.innerHTML = `
       <h2>Your plan outline</h2>
       <div class="note">Add a Google Maps API key (the box at the top) to get real distances, nearby hotels, restaurants and a day-by-day plan. Until then, here is your budget split and map links.</div>
-      ${statsHtml([["Transport (estimated share)", inr(T), "Return journey for everyone"],["Stay per night", inr(R*SPLIT.stay/nights), `${d.days} days, ${nights} night${nights>1?"s":""}`],["Food per day", inr(R*SPLIT.food/d.days), `For ${d.people} traveller${d.people>1?"s":""}`],["Local travel and tickets", inr(R*SPLIT.local), "For the whole trip"]])}
+      ${statsHtml([...(est ? [["Distance", Math.round(est.dist) + " km", "One way, estimated"],["Travel time", hrs(est.h), `By ${MODES[d.mode].name.toLowerCase()}, one way`]] : []),["Transport cost", inr(T), est ? fareNote() : "Rough share of budget (distance not found)"],["Stay per night", inr(R*SPLIT.stay/nights), `${d.days} days, ${nights} night${nights>1?"s":""}`],["Food per day", inr(R*SPLIT.food/d.days), `For ${d.people} traveller${d.people>1?"s":""}`],["Local travel and tickets", inr(R*SPLIT.local), "For the whole trip"]])}
+      ${fareHtml()}
+      ${compare}
       <h2>Route</h2><iframe title="Route map" loading="lazy" src="https://maps.google.com/maps?saddr=${mk(d.from)}&daddr=${mk(d.to)}&output=embed"></iframe>
       <p><a href="${gmDir}" target="_blank" rel="noopener">Open the route in Google Maps</a></p>
       <h2>Explore near ${esc(d.to)}</h2>
@@ -308,13 +336,13 @@ async function generate(){
     html += statsHtml([
       ["Distance", Math.round(dist) + " km", exact ? "One way, by road (Google Maps)" : "One way, estimated"],
       ["Travel time", hrs(hrsTravel), `By ${M.name.toLowerCase()}, one way`],
-      ["Transport cost", inr(T), "Return journey, estimated"],
+      ["Transport cost", inr(T), fareNote()],
       ["Stay budget", inr(stayPerRoom) + " per room night", `${rooms} room${rooms>1?"s":""}, ${nights} night${nights>1?"s":""}`],
       ["Food budget", inr(foodPerMeal) + " per meal", "Per person"],
       ["Local travel and tickets", inr(localTotal), "For the whole trip"]]);
     if(d.budget - T <= 0) html += `<div class="note">Transport alone is more than your budget. Try a cheaper way to travel or increase the budget.</div>`;
     else if(arrive > leave) html += `<div class="note">The travel time takes most of your trip. Add more days or choose a faster transport.</div>`;
-    html += `<p><a href="${gmDir}" target="_blank" rel="noopener">Open the route in Google Maps</a></p>`;
+    html += `<p><a href="${gmDir}" target="_blank" rel="noopener">Open the route in Google Maps</a></p>` + fareHtml();
     const maxL = maxStayLevel(stayPerRoom);
     const fit = hotels.filter(h => h.price && okLevel(h.price, maxL)).sort((a,b) => score(b)-score(a));
     const unk = hotels.filter(h => !h.price).sort((a,b) => score(b)-score(a));
